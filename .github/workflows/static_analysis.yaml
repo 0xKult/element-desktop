@@ -1,56 +1,85 @@
 name: Static Analysis
 on:
-  pull_request: { }
-  push:
-    branches: [ develop, master ]
+    pull_request: {}
+    push:
+        branches: [develop, master]
+permissions: {} # No permissions needed
 jobs:
-  ts_lint:
-    name: "Typescript Syntax Check"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+    ts_lint:
+        name: "Typescript Syntax Check"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+            - uses: actions/setup-node@v4
+              with:
+                  node-version-file: package.json
+                  cache: "yarn"
+
+            # Does not need branch matching as only analyses this layer
+            - name: Install Deps
+              run: "yarn install --frozen-lockfile"
+
+            - name: Typecheck
+              run: "yarn run lint:types"
+
+    i18n_lint:
+        name: "i18n Check"
+        uses: matrix-org/matrix-web-i18n/.github/workflows/i18n_check.yml@main
+        permissions:
+            pull-requests: read
         with:
-          cache: 'yarn'
+            hardcoded-words: "Element"
 
-      # Does not need branch matching as only analyses this layer
-      - name: Install Deps
-        run: "yarn install --pure-lockfile"
+    js_lint:
+        name: "ESLint"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Typecheck
-        run: "yarn run lint:types"
+            - uses: actions/setup-node@v4
+              with:
+                  node-version-file: package.json
+                  cache: "yarn"
 
-  i18n_lint:
-    name: "i18n Diff Check"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+            # Does not need branch matching as only analyses this layer
+            - name: Install Deps
+              run: "yarn install --frozen-lockfile"
 
-      - uses: actions/setup-node@v3
-        with:
-          cache: 'yarn'
+            - name: Run Linter
+              run: "yarn run lint:js"
 
-      # Does not need branch matching as only analyses this layer
-      - name: Install Deps
-        run: "yarn install --pure-lockfile"
+    workflow_lint:
+        name: "Workflow Lint"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: i18n Check
-        run: "yarn run diff-i18n"
+            - uses: actions/setup-node@v4
+              with:
+                  node-version-file: package.json
+                  cache: "yarn"
 
-  js_lint:
-    name: "ESLint"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+            # Does not need branch matching as only analyses this layer
+            - name: Install Deps
+              run: "yarn install --frozen-lockfile"
 
-      - uses: actions/setup-node@v3
-        with:
-          cache: 'yarn'
+            - name: Run Linter
+              run: "yarn lint:workflows"
 
-      # Does not need branch matching as only analyses this layer
-      - name: Install Deps
-        run: "yarn install --pure-lockfile"
+    analyse_dead_code:
+        name: "Analyse Dead Code"
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Run Linter
-        run: "yarn run lint:js"
+            - uses: actions/setup-node@v4
+              with:
+                  node-version-file: package.json
+                  cache: "yarn"
+
+            - name: Install Deps
+              run: "yarn install --frozen-lockfile"
+
+            - name: Run linter
+              run: "yarn run lint:knip"

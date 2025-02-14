@@ -1,40 +1,34 @@
 /*
-Copyright 2021 New Vector Ltd
+Copyright 2021-2024 New Vector Ltd.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
 */
 
 import counterpart from "counterpart";
+import { type TranslationKey as TKey } from "matrix-web-i18n";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import type Store from 'electron-store';
+import type Store from "electron-store";
+import type EN from "./i18n/strings/en_EN.json";
+import { loadJsonFile } from "./utils.js";
 
-const DEFAULT_LOCALE = "en";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function _td(text: string): string {
-    return text;
-}
+const FALLBACK_LOCALE = "en";
+
+type TranslationKey = TKey<typeof EN>;
 
 type SubstitutionValue = number | string;
 
-interface IVariables {
-    [key: string]: SubstitutionValue;
+interface Variables {
+    [key: string]: SubstitutionValue | undefined;
     count?: number;
 }
 
-export function _t(text: string, variables: IVariables = {}): string {
-    const args = Object.assign({ interpolate: false }, variables);
-
-    const { count } = args;
+export function _t(text: TranslationKey, variables: Variables = {}): string {
+    const { count } = variables;
 
     // Horrible hack to avoid https://github.com/vector-im/element-web/issues/4191
     // The interpolation library that counterpart uses does not support undefined/null
@@ -43,21 +37,20 @@ export function _t(text: string, variables: IVariables = {}): string {
     // valid ES6 template strings to i18n strings it's extremely easy to pass undefined/null
     // if there are no existing null guards. To avoid this making the app completely inoperable,
     // we'll check all the values for undefined/null and stringify them here.
-    Object.keys(args).forEach((key) => {
-        if (args[key] === undefined) {
+    Object.keys(variables).forEach((key) => {
+        if (variables[key] === undefined) {
             console.warn("safeCounterpartTranslate called with undefined interpolation name: " + key);
-            args[key] = 'undefined';
+            variables[key] = "undefined";
         }
-        if (args[key] === null) {
+        if (variables[key] === null) {
             console.warn("safeCounterpartTranslate called with null interpolation name: " + key);
-            args[key] = 'null';
+            variables[key] = "null";
         }
     });
-    let translated = counterpart.translate(text, args);
-    if (translated === undefined && count !== undefined) {
-        // counterpart does not do fallback if no pluralisation exists
-        // in the preferred language, so do it here
-        translated = counterpart.translate(text, Object.assign({}, args, { locale: DEFAULT_LOCALE }));
+    let translated = counterpart.translate(text, variables);
+    if (!translated && count !== undefined) {
+        // counterpart does not do fallback if no pluralisation exists in the preferred language, so do it here
+        translated = counterpart.translate(text, { ...variables, locale: FALLBACK_LOCALE });
     }
 
     // The translation returns text so there's no XSS vector here (no unsafe HTML, no code execution)
@@ -72,12 +65,12 @@ export class AppLocalization {
     private static readonly STORE_KEY = "locale";
 
     private readonly store: TypedStore;
-    private readonly localizedComponents: Set<Component>;
+    private readonly localizedComponents?: Set<Component>;
 
-    constructor({ store, components = [] }: { store: TypedStore, components: Component[] }) {
-        counterpart.registerTranslations("en", this.fetchTranslationJson("en_EN"));
-        counterpart.setFallbackLocale('en');
-        counterpart.setSeparator('|');
+    public constructor({ store, components = [] }: { store: TypedStore; components: Component[] }) {
+        counterpart.registerTranslations(FALLBACK_LOCALE, this.fetchTranslationJson("en_EN"));
+        counterpart.setFallbackLocale(FALLBACK_LOCALE);
+        counterpart.setSeparator("|");
 
         if (Array.isArray(components)) {
             this.localizedComponents = new Set(components);
@@ -86,7 +79,8 @@ export class AppLocalization {
         this.store = store;
         if (this.store.has(AppLocalization.STORE_KEY)) {
             const locales = this.store.get(AppLocalization.STORE_KEY);
-            this.setAppLocale(locales);
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            this.setAppLocale(locales!);
         }
 
         this.resetLocalizedUI();
@@ -107,10 +101,10 @@ export class AppLocalization {
     public fetchTranslationJson(locale: string): Record<string, string> {
         try {
             console.log("Fetching translation json for locale: " + locale);
-            return require(`./i18n/strings/${this.denormalize(locale)}.json`);
+            return loadJsonFile(__dirname, "i18n", "strings", `${this.denormalize(locale)}.json`);
         } catch (e) {
             console.log(`Could not fetch translation json for locale: '${locale}'`, e);
-            return null;
+            return {};
         }
     }
 
@@ -121,16 +115,15 @@ export class AppLocalization {
             locales = [locales];
         }
 
-        locales.forEach(locale => {
+        const loadedLocales = locales.filter((locale) => {
             const translations = this.fetchTranslationJson(locale);
             if (translations !== null) {
                 counterpart.registerTranslations(locale, translations);
             }
+            return !!translations;
         });
 
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore - this looks like a bug but is out of scope for this conversion
-        counterpart.setLocale(locales);
+        counterpart.setLocale(loadedLocales[0]);
         this.store.set(AppLocalization.STORE_KEY, locales);
 
         this.resetLocalizedUI();
@@ -138,7 +131,7 @@ export class AppLocalization {
 
     public resetLocalizedUI(): void {
         console.log("Resetting the UI components after locale change");
-        this.localizedComponents.forEach(componentSetup => {
+        this.localizedComponents?.forEach((componentSetup) => {
             if (typeof componentSetup === "function") {
                 componentSetup();
             }

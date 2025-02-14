@@ -17,13 +17,14 @@ when releasing.
 
 Install the pre-requisites for your system:
 
-* [Windows pre-requisites](https://github.com/vector-im/element-desktop/blob/develop/docs/windows-requirements.md)
-* Linux: TODO
-* OS X: TODO
+- [Windows pre-requisites](https://github.com/vector-im/element-desktop/blob/develop/docs/windows-requirements.md)
+- Linux: TODO
+- OS X: TODO
 
 Then optionally, [add seshat and dependencies to support search in E2E rooms](#adding-seshat-for-search-in-e2e-encrypted-rooms).
 
 Then, to build for an architecture selected automatically based on your system (recommended), run:
+
 ```
 yarn run build:native
 ```
@@ -47,7 +48,7 @@ using yarn at the root of this project:
 
     yarn add matrix-seshat
 
-You will have to rebuild the native libraries against electron's version of
+You will have to rebuild the native libraries against electron's version
 of node rather than your system node, using the `electron-build-env` tool.
 This is also needed to when pulling in changes to Seshat using `yarn link`.
 
@@ -66,20 +67,35 @@ as usual using:
 
     yarn start
 
+### Statically linking libsqlcipher
+
+On Windows & macOS we always statically link libsqlcipher for it is not generally available.
+On Linux by default we will use a system package, on debian & ubuntu this is `libsqlcipher0`,
+but this is problematic for some other packages, and we found that it may crashes for unknown reasons.
+By including `SQLCIPHER_BUNDLED=1` in the build environment, the build scripts will fully statically
+link sqlcipher, including a static build of OpenSSL.
+
+More info can be found at https://github.com/matrix-org/seshat/issues/102
+and https://github.com/vector-im/element-web/issues/20926.
+
 ## Compiling for specific architectures
 
 ### macOS
 
 On macOS, you can build universal native modules too:
+
 ```
 yarn run build:native:universal
 ```
 
 ...or you can build for a specific architecture:
+
 ```
 yarn run build:native --target x86_64-apple-darwin
 ```
+
 or
+
 ```
 yarn run build:native --target aarch64-apple-darwin
 ```
@@ -94,10 +110,13 @@ yarn run build:universal
 ### Windows
 
 If you're on Windows, you can choose to build specifically for 32 or 64 bit:
+
 ```
 yarn run build:32
 ```
+
 or
+
 ```
 yarn run build:64
 ```
@@ -133,6 +152,6 @@ The current set of native modules are stored in `.hak/hakModules`,
 so you can use this to check what architecture is currently in place, eg:
 
 ```
-$ lipo -info .hak/hakModules/keytar/build/Release/keytar.node 
-Architectures in the fat file: .hak/hakModules/keytar/build/Release/keytar.node are: x86_64 arm64 
+$ lipo -info .hak/hakModules/keytar/build/Release/keytar.node
+Architectures in the fat file: .hak/hakModules/keytar/build/Release/keytar.node are: x86_64 arm64
 ```

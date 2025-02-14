@@ -1,28 +1,20 @@
 /*
-Copyright 2020-2021 The Matrix.org Foundation C.I.C.
+Copyright 2024 New Vector Ltd.
+Copyright 2020, 2021 The Matrix.org Foundation C.I.C.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
 */
 
-import path from 'path';
-import fsProm from 'fs/promises';
-import childProcess from 'child_process';
-import rimraf from 'rimraf';
-import glob from 'glob';
-import mkdirp from 'mkdirp';
+import path from "node:path";
+import fsProm from "node:fs/promises";
+import childProcess from "node:child_process";
+import { rimraf } from "rimraf";
+import { glob } from "glob";
+import { mkdirp } from "mkdirp";
 
-import HakEnv from './hakEnv';
-import { DependencyInfo } from './dep';
+import type HakEnv from "./hakEnv.js";
+import type { DependencyInfo } from "./dep.js";
 
 export default async function copy(hakEnv: HakEnv, moduleInfo: DependencyInfo): Promise<void> {
     if (moduleInfo.cfg.prune) {
@@ -31,12 +23,9 @@ export default async function copy(hakEnv: HakEnv, moduleInfo: DependencyInfo): 
         // (and if you set glob.cwd it just breaks because it can't find the files)
         const oldCwd = process.cwd();
         try {
+            await mkdirp(moduleInfo.moduleOutDir);
             process.chdir(moduleInfo.moduleOutDir);
-            await new Promise<void>((resolve, reject) => {
-                rimraf(moduleInfo.cfg.prune, {}, err => {
-                    err ? reject(err) : resolve();
-                });
-            });
+            await rimraf(moduleInfo.cfg.prune);
         } finally {
             process.chdir(oldCwd);
         }
@@ -46,47 +35,35 @@ export default async function copy(hakEnv: HakEnv, moduleInfo: DependencyInfo): 
         // If there are multiple moduleBuildDirs, singular moduleBuildDir
         // is the same as moduleBuildDirs[0], so we're just listing the contents
         // of the first one.
-        const files = await new Promise<string[]>((resolve, reject) => {
-            glob(moduleInfo.cfg.copy, {
-                nosort: true,
-                silent: true,
-                cwd: moduleInfo.moduleBuildDir,
-            }, (err, files) => {
-                err ? reject(err) : resolve(files);
-            });
+        const files = await glob(moduleInfo.cfg.copy, {
+            cwd: moduleInfo.moduleBuildDir,
         });
 
         if (moduleInfo.moduleBuildDirs.length > 1) {
             if (!hakEnv.isMac()) {
                 console.error(
-                    "You asked me to copy multiple targets but I've only been taught " +
-                    "how to do that on macOS.",
+                    "You asked me to copy multiple targets but I've only been taught " + "how to do that on macOS.",
                 );
                 throw new Error("Can't copy multiple targets on this platform");
             }
 
             for (const f of files) {
-                const components = moduleInfo.moduleBuildDirs.map(dir => path.join(dir, f));
+                const components = moduleInfo.moduleBuildDirs.map((dir) => path.join(dir, f));
                 const dst = path.join(moduleInfo.moduleOutDir, f);
 
                 await mkdirp(path.dirname(dst));
                 await new Promise<void>((resolve, reject) => {
-                    childProcess.execFile('lipo',
-                        ['-create', '-output', dst, ...components], (err) => {
-                            if (err) {
-                                reject(err);
-                            } else {
-                                resolve();
-                            }
-                        },
-                    );
+                    childProcess.execFile("lipo", ["-create", "-output", dst, ...components], (err) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve();
+                        }
+                    });
                 });
             }
         } else {
-            console.log(
-                "Copying files from " +
-                moduleInfo.moduleBuildDir + " to " + moduleInfo.moduleOutDir,
-            );
+            console.log("Copying files from " + moduleInfo.moduleBuildDir + " to " + moduleInfo.moduleOutDir);
             for (const f of files) {
                 console.log("\t" + f);
                 const src = path.join(moduleInfo.moduleBuildDir, f);
